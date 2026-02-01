@@ -51,11 +51,20 @@ class LocalStorageManager {
         return this.data.templates;
     }
 
-    createTemplate(title, itemTexts) {
+    // --- Template Methods ---
+
+    createTemplate(title, sectionsData) {
+        // sectionsData: [{title: "Section Title", items: ["Item1", "Item2"]}]
+        const sections = sectionsData.map(sec => ({
+            id: this._generateId(),
+            title: sec.title,
+            items: sec.items.map(text => ({ text }))
+        }));
+
         const newTemplate = {
             id: this._generateId(),
             title: title,
-            items: itemTexts.map(text => ({ text })),
+            sections: sections
         };
         this._touch(newTemplate, true);
         this.data.templates.push(newTemplate);
@@ -63,13 +72,19 @@ class LocalStorageManager {
         return newTemplate;
     }
 
-    updateTemplate(id, title, itemTexts) {
+    updateTemplate(id, title, sectionsData) {
         const template = this.data.templates.find(t => t.id === id);
         if (!template) return null;
+
         if (title !== undefined) template.title = title;
-        if (itemTexts !== undefined) {
-            template.items = itemTexts.map(text => ({ text }));
+        if (sectionsData !== undefined) {
+            template.sections = sectionsData.map(sec => ({
+                id: this._generateId(), // Always regenerate IDs on full update for simplicity or keep if sophisticated
+                title: sec.title,
+                items: sec.items.map(text => ({ text }))
+            }));
         }
+
         this._touch(template);
         this._saveData();
         return template;
@@ -91,17 +106,37 @@ class LocalStorageManager {
             console.error('Template not found');
             return null;
         }
-        const groupItems = template.items.map(item => ({
+
+        // Deep copy sections and items, adding status
+        const groupSections = (template.sections || []).map(sec => ({
             id: this._generateId(),
-            text: item.text,
-            completed: false
+            title: sec.title,
+            items: sec.items.map(item => ({
+                id: this._generateId(),
+                text: item.text,
+                completed: false
+            }))
         }));
+
+        // Handle legacy flatness if any (migration on fly)
+        if (!template.sections && template.items) {
+            groupSections.push({
+                id: this._generateId(),
+                title: '一般',
+                items: template.items.map(item => ({
+                    id: this._generateId(),
+                    text: item.text,
+                    completed: false
+                }))
+            });
+        }
+
         const newGroup = {
             id: this._generateId(),
             templateId: template.id,
             status: 'active',
             title: template.title,
-            items: groupItems
+            sections: groupSections
         };
         this._touch(newGroup, true);
         this.data.groups.push(newGroup);
@@ -109,18 +144,24 @@ class LocalStorageManager {
         return newGroup;
     }
 
-    createGroup(title, itemTexts = []) {
-        const groupItems = itemTexts.map(text => ({
+    createGroup(title, sectionsData = []) {
+        // One-off creation
+        const sections = sectionsData.map(sec => ({
             id: this._generateId(),
-            text: text,
-            completed: false
+            title: sec.title,
+            items: sec.items.map(text => ({
+                id: this._generateId(),
+                text: text,
+                completed: false
+            }))
         }));
+
         const newGroup = {
             id: this._generateId(),
             templateId: null,
             status: 'active',
             title: title,
-            items: groupItems
+            sections: sections
         };
         this._touch(newGroup, true);
         this.data.groups.push(newGroup);
@@ -131,18 +172,56 @@ class LocalStorageManager {
     toggleTodoCompletion(groupId, todoId) {
         const group = this.data.groups.find(g => g.id === groupId);
         if (!group) return null;
-        const todo = group.items.find(i => i.id === todoId);
-        if (!todo) return null;
-        todo.completed = !todo.completed;
-        this._touch(group);
-        this._saveData();
-        return group;
+
+        // Search through sections
+        if (group.sections) {
+            for (const section of group.sections) {
+                const todo = section.items.find(i => i.id === todoId);
+                if (todo) {
+                    todo.completed = !todo.completed;
+                    this._touch(group);
+                    this._saveData();
+                    return group;
+                }
+            }
+        }
+
+        // Legacy fallback
+        if (group.items) {
+            const todo = group.items.find(i => i.id === todoId);
+            if (todo) {
+                todo.completed = !todo.completed;
+                this._touch(group);
+                this._saveData();
+                return group;
+            }
+        }
+
+        return null;
     }
 
     checkAllCompleted(groupId) {
         const group = this.data.groups.find(g => g.id === groupId);
         if (!group) return false;
-        return group.items.length > 0 && group.items.every(i => i.completed);
+
+        if (group.sections && group.sections.length > 0) {
+            // Check all items in all sections
+            // Ensure at least one item exists overall? Or just that all existing are done.
+            // Let's say: if there are items, they must be done.
+            let hasItems = false;
+            const allSectionsDone = group.sections.every(sec => {
+                if (sec.items.length > 0) hasItems = true;
+                return sec.items.every(i => i.completed);
+            });
+            return hasItems && allSectionsDone;
+        }
+
+        // Legacy
+        if (group.items) {
+            return group.items.length > 0 && group.items.every(i => i.completed);
+        }
+
+        return false;
     }
 
     archiveGroup(groupId) {
@@ -201,8 +280,8 @@ class UIManager {
             modal: document.getElementById('template-modal'),
             modalCloseBtns: document.querySelectorAll('.close-modal'),
             tplTitleInput: document.getElementById('tpl-title-input'),
-            tplItemsList: document.getElementById('tpl-items-list'),
-            tplNewItemInput: document.getElementById('tpl-new-item-input'),
+            tplSectionsContainer: document.getElementById('tpl-sections-container'),
+            btnAddSection: document.getElementById('btn-add-section'),
             feedbackOverlay: document.getElementById('feedback-overlay')
         };
     }
@@ -219,15 +298,15 @@ class UIManager {
         this.elements.modal.addEventListener('click', (e) => {
             if (e.target === this.elements.modal) this.closeModal();
         });
-        this.elements.btnAddTplItem.addEventListener('click', () => this.addTemplateItemInput());
-        this.elements.tplNewItemInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') this.addTemplateItemInput();
-        });
+
+        this.elements.btnAddSection.addEventListener('click', () => this.addTemplateSection());
+
         this.elements.btnSaveTemplate.addEventListener('click', () => this.saveTemplate());
         this.elements.btnQuickAdd.addEventListener('click', () => {
             const title = prompt("新しいタスクグループの名前:");
             if (title) {
-                this.store.createGroup(title);
+                // Quick add creates a group with a default General section
+                this.store.createGroup(title, [{ title: '一般', items: [] }]);
                 this.renderActiveGroups();
             }
         });
@@ -266,11 +345,13 @@ class UIManager {
         } else {
             this.elements.emptyStateActive.style.display = 'none';
         }
+
         groups.forEach(group => {
             const card = document.createElement('div');
             card.className = 'card';
             const dateStr = new Date(group.createdAt).toLocaleDateString();
-            card.innerHTML = `
+
+            let contentHtml = `
                 <div class="card-header">
                     <div>
                         <div class="card-title">${this.escapeHtml(group.title)}</div>
@@ -282,33 +363,79 @@ class UIManager {
                         </button>
                     </div>
                 </div>
-                <ul class="mini-todo-list" id="list-${group.id}"></ul>
+                <div class="group-sections" id="group-content-${group.id}">
+                    <!-- Sections injected here -->
+                </div>
             `;
+            card.innerHTML = contentHtml;
             container.appendChild(card);
-            const listEl = card.querySelector(`#list-${group.id}`);
-            group.items.forEach(item => {
-                const li = document.createElement('li');
-                li.className = `mini-todo-item ${item.completed ? 'completed' : ''}`;
-                li.innerHTML = `
-                    <div class="mini-check" onclick="app.toggleItem('${group.id}', '${item.id}')">
-                        <i class="fas fa-check"></i>
-                    </div>
-                    <span class="mini-text">${this.escapeHtml(item.text)}</span>
-                `;
-                listEl.appendChild(li);
-            });
+
+            const contentEl = card.querySelector(`#group-content-${group.id}`);
+
+            // Render Sections
+            const sections = group.sections || [];
+            // Migration fallback
+            if (sections.length === 0 && group.items && group.items.length > 0) {
+                this.renderSection(group.id, { id: 'legacy', title: 'タスク', items: group.items }, contentEl);
+            } else {
+                sections.forEach(section => {
+                    this.renderSection(group.id, section, contentEl);
+                });
+            }
         });
+    }
+
+    renderSection(groupId, section, container) {
+        if (!section.items) return;
+
+        const sectionEl = document.createElement('div');
+        sectionEl.className = 'group-section';
+        sectionEl.innerHTML = `
+            <div class="group-section-title">${this.escapeHtml(section.title)}</div>
+            <ul class="mini-todo-list"></ul>
+        `;
+        const listEl = sectionEl.querySelector('ul');
+
+        section.items.forEach(item => {
+            const li = document.createElement('li');
+            li.className = `mini-todo-item ${item.completed ? 'completed' : ''}`;
+            li.innerHTML = `
+                <div class="mini-check" onclick="app.toggleItem('${groupId}', '${item.id}')">
+                    <i class="fas fa-check"></i>
+                </div>
+                <span class="mini-text">${this.escapeHtml(item.text)}</span>
+            `;
+            listEl.appendChild(li);
+        });
+
+        container.appendChild(sectionEl);
     }
 
     renderTemplates() {
         const templates = this.store.getTemplates();
         const container = this.elements.templatesContainer;
         container.innerHTML = '';
+
         templates.forEach(tpl => {
             const card = document.createElement('div');
             card.className = 'card template-card';
-            const previewItems = tpl.items.slice(0, 3).map(i => `• ${this.escapeHtml(i.text)}`).join('<br>');
-            const moreText = tpl.items.length > 3 ? `...他 ${tpl.items.length - 3} 件` : '';
+
+            // Preview: Show first 2 sections and their first 2 items
+            let previewHtml = '';
+            const sections = tpl.sections || [];
+
+            // Legacy support
+            if (sections.length === 0 && tpl.items && tpl.items.length > 0) {
+                previewHtml = tpl.items.slice(0, 3).map(i => `• ${this.escapeHtml(i.text)}`).join('<br>');
+            } else {
+                sections.slice(0, 2).forEach(sec => {
+                    previewHtml += `<div class="preview-section-title">${this.escapeHtml(sec.title)}</div>`;
+                    sec.items.slice(0, 2).forEach(i => {
+                        previewHtml += `<div class="preview-item">• ${this.escapeHtml(i.text)}</div>`;
+                    });
+                });
+            }
+
             card.innerHTML = `
                 <div class="card-header">
                     <div class="card-title">${this.escapeHtml(tpl.title)}</div>
@@ -321,7 +448,7 @@ class UIManager {
                         </button>
                     </div>
                 </div>
-                <div class="template-items-preview">${previewItems}<br>${moreText}</div>
+                <div class="template-items-preview">${previewHtml}</div>
                 <button class="btn-start-group" onclick="app.startFromTemplate('${tpl.id}')">
                     <i class="fas fa-play"></i> このテンプレートで開始
                 </button>
@@ -330,53 +457,121 @@ class UIManager {
         });
     }
 
+    closeModal() {
+        this.elements.modal.classList.add('hidden');
+        this.currentEditId = null;
+        this.elements.tplTitleInput.value = '';
+        this.elements.tplSectionsContainer.innerHTML = '';
+    }
+
     openModal(template = null) {
         this.elements.modal.classList.remove('hidden');
         this.elements.tplTitleInput.value = '';
-        this.elements.tplItemsList.innerHTML = '';
-        this.elements.tplNewItemInput.value = '';
+        this.elements.tplSectionsContainer.innerHTML = '';
+
         if (template) {
             this.currentEditId = template.id;
             this.elements.tplTitleInput.value = template.title;
             const header = document.querySelector('#template-modal h3');
             if (header) header.innerText = 'テンプレート編集';
-            template.items.forEach(item => {
-                this.addTemplateItemInput(item.text);
-            });
+
+            // Load Sections
+            const sections = template.sections || [];
+            // Legacy
+            if (sections.length === 0 && template.items && template.items.length > 0) {
+                this.addTemplateSection('一般', template.items.map(i => i.text));
+            } else {
+                sections.forEach(sec => {
+                    this.addTemplateSection(sec.title, sec.items.map(i => i.text));
+                });
+            }
         } else {
             this.currentEditId = null;
             this.elements.tplTitleInput.value = '';
             const header = document.querySelector('#template-modal h3');
             if (header) header.innerText = '新規テンプレート作成';
-            this.addTemplateItemInput('');
+
+            // Add one default section
+            this.addTemplateSection('');
         }
     }
 
-    closeModal() {
-        this.elements.modal.classList.add('hidden');
-        this.currentEditId = null;
+    addTemplateSection(title = '', items = []) {
+        const sectionId = crypto.randomUUID();
+        const div = document.createElement('div');
+        div.className = 'tpl-section';
+        div.dataset.sectionId = sectionId;
+
+        div.innerHTML = `
+            <div class="tpl-section-header">
+                <div class="section-controls">
+                    <button class="icon-btn move-up-btn" title="上に移動"><i class="fas fa-chevron-up"></i></button>
+                    <button class="icon-btn move-down-btn" title="下に移動"><i class="fas fa-chevron-down"></i></button>
+                </div>
+                <input type="text" class="tpl-section-title-input" placeholder="大タスク名 (例: 持ち物)" value="${this.escapeHtml(title)}">
+                <button class="icon-btn danger remove-section-btn"><i class="fas fa-trash"></i></button>
+            </div>
+            <div class="tpl-section-items"></div>
+            <div class="tpl-section-footer">
+                <button class="btn-add-item-to-section text-btn"><i class="fas fa-plus"></i> 小タスク追加</button>
+            </div>
+        `;
+
+        // Bind Events
+        div.querySelector('.remove-section-btn').addEventListener('click', () => {
+            if (confirm('このグループを削除しますか？')) div.remove();
+        });
+        div.querySelector('.move-up-btn').addEventListener('click', () => this.moveNode(div, 'up'));
+        div.querySelector('.move-down-btn').addEventListener('click', () => this.moveNode(div, 'down'));
+
+        const itemsContainer = div.querySelector('.tpl-section-items');
+        div.querySelector('.btn-add-item-to-section').addEventListener('click', () => {
+            this.addTemplateItemToSection(itemsContainer, '');
+        });
+
+        this.elements.tplSectionsContainer.appendChild(div);
+
+        // Add initial items if provided
+        items.forEach(text => {
+            this.addTemplateItemToSection(itemsContainer, text);
+        });
+
+        // If new section (no title, no items), add one blank item
+        if (!title && items.length === 0) {
+            this.addTemplateItemToSection(itemsContainer, '');
+        }
     }
 
-    addTemplateItemInput(value = '') {
-        let text = value;
-        if (!text) {
-            const input = this.elements.tplNewItemInput;
-            text = input.value.trim();
-            if (!text) return;
-            input.value = '';
-            input.focus();
-        }
+    addTemplateItemToSection(container, text = '') {
         const div = document.createElement('div');
         div.className = 'tpl-item-row';
         div.innerHTML = `
-            <i class="fas fa-dot-circle" style="font-size: 0.6rem; color: var(--accent-color);"></i>
+            <div class="item-controls" style="margin-right: 5px;">
+                 <i class="fas fa-chevron-up move-item-up" style="cursor:pointer; color:#b2bec3; font-size:0.7rem; margin-right:2px;"></i>
+                 <i class="fas fa-chevron-down move-item-down" style="cursor:pointer; color:#b2bec3; font-size:0.7rem;"></i>
+            </div>
+            <i class="fas fa-dot-circle" style="font-size: 0.6rem; color: #b2bec3;"></i>
             <span contenteditable="true" class="editable-span">${this.escapeHtml(text)}</span>
             <i class="fas fa-times remove-item-btn" style="margin-left:auto; cursor:pointer; color:#b2bec3;"></i>
         `;
         div.querySelector('.remove-item-btn').addEventListener('click', () => {
+            // If this is the last item and empty, maybe warn? No, just remove.
             div.remove();
         });
-        this.elements.tplItemsList.appendChild(div);
+        div.querySelector('.move-item-up').addEventListener('click', () => this.moveNode(div, 'up'));
+        div.querySelector('.move-item-down').addEventListener('click', () => this.moveNode(div, 'down'));
+
+        container.appendChild(div);
+    }
+
+    moveNode(node, direction) {
+        if (direction === 'up') {
+            const prev = node.previousElementSibling;
+            if (prev) node.parentNode.insertBefore(node, prev);
+        } else {
+            const next = node.nextElementSibling;
+            if (next) node.parentNode.insertBefore(next, node);
+        }
     }
 
     saveTemplate() {
@@ -385,18 +580,38 @@ class UIManager {
             alert('テンプレート名を入力してください');
             return;
         }
-        const items = [];
-        this.elements.tplItemsList.querySelectorAll('span').forEach(span => {
-            items.push(span.innerText);
+
+        const sectionsData = [];
+        const sectionEls = this.elements.tplSectionsContainer.querySelectorAll('.tpl-section');
+
+        sectionEls.forEach(secEl => {
+            const secTitle = secEl.querySelector('.tpl-section-title-input').value.trim() || '名称未設定';
+            const items = [];
+            secEl.querySelectorAll('.editable-span').forEach(span => {
+                const val = span.innerText.trim();
+                // Allow saving empty items if user wants, or filter?
+                // Filtering empty items is usually good UX.
+                if (val) items.push(val);
+            });
+
+            // FIXED: Allow section even if items are empty, as long as the intention is to create a section.
+            // But usually a section should have items. Let's allow it if title is set OR items exist.
+            // If both are empty (default new section not touched), maybe skip?
+            // User feedback: "Could not save". Probably they had a section but maybe items check failed.
+            // Let's Just push it regardless, or check if it's "worth" saving.
+            // Reverting to: always push if it exists in DOM, trusting user deletion.
+            sectionsData.push({ title: secTitle, items: items });
         });
-        if (items.length === 0) {
-            alert('少なくとも1つのタスクを追加してください');
+
+        if (sectionsData.length === 0) {
+            alert('少なくとも1つのセクション・タスクを追加してください');
             return;
         }
+
         if (this.currentEditId) {
-            this.store.updateTemplate(this.currentEditId, title, items);
+            this.store.updateTemplate(this.currentEditId, title, sectionsData);
         } else {
-            this.store.createTemplate(title, items);
+            this.store.createTemplate(title, sectionsData);
         }
         this.closeModal();
         this.renderTemplates();

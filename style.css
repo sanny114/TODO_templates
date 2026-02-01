@@ -246,7 +246,146 @@ body {
     color: var(--text-color);
 }
 
-/* --- Cards Grid --- */
+/* --- Group/Template Sections (Refactored) --- */
+.group-section {
+    margin-bottom: 0.2rem;
+    padding: 2px 0;
+}
+
+.group-section-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    background-color: rgba(0, 0, 0, 0.03);
+    padding: 0.3rem 0.6rem;
+    border-radius: 4px;
+    margin-bottom: 0.2rem;
+    display: flex;
+    align-items: center;
+}
+
+/* Override items margin when inside a section */
+.group-section .mini-todo-list {
+    margin-left: 0.5rem;
+    border-left: 2px solid rgba(0, 0, 0, 0.05);
+    padding-left: 0.5rem;
+}
+
+/* Modal Section Styles */
+.tpl-section {
+    background: #f8f9fa;
+    border: 1px solid #dfe6e9;
+    border-radius: 6px;
+    padding: 0.8rem;
+    margin-bottom: 1rem;
+}
+
+.tpl-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.tpl-section-title-input {
+    width: 80%;
+    padding: 0.4rem;
+    border: 1px solid transparent;
+    border-bottom: 1px solid #b2bec3;
+    background: transparent;
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+.tpl-section-title-input:focus {
+    border-bottom: 2px solid var(--accent-color);
+    outline: none;
+}
+
+/* Section Controls (Up/Down) */
+.section-controls {
+    display: flex;
+    gap: 2px;
+    margin-right: 8px;
+}
+
+.section-controls .icon-btn {
+    padding: 2px;
+    font-size: 0.8rem;
+    color: #b2bec3;
+    width: 24px;
+    height: 24px;
+}
+
+.section-controls .icon-btn:hover {
+    color: var(--accent-color);
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.tpl-section-footer {
+    margin-top: 0.5rem;
+    text-align: left;
+}
+
+.btn-add-item-to-section {
+    color: var(--accent-color);
+    font-size: 0.85rem;
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+}
+
+.btn-add-item-to-section:hover {
+    text-decoration: underline;
+}
+
+/* Item Controls */
+.tpl-item-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    padding: 2px 0;
+}
+
+.item-controls {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    height: 16px;
+}
+
+.item-controls i:hover {
+    color: var(--accent-color) !important;
+}
+
+.editable-span {
+    flex: 1;
+    border-bottom: 1px dashed #dfe6e9;
+    padding: 2px 4px;
+    outline: none;
+    color: var(--text-color);
+}
+
+.editable-span:focus {
+    border-bottom: 1px solid var(--accent-color);
+    background: rgba(255, 255, 255, 0.5);
+}
+
+.preview-section-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    margin-top: 4px;
+    color: #555;
+}
+
+.preview-item {
+    padding-left: 8px;
+    color: #666;
+}
+
+/* --- Cards Grid --- (unchanged) */
 .groups-grid,
 .templates-grid {
     display: grid;
