@@ -95,6 +95,27 @@ class LocalStorageManager {
         this._saveData();
     }
 
+    duplicateTemplate(templateId) {
+        const template = this.data.templates.find(t => t.id === templateId);
+        if (!template) return null;
+
+        // Deep copy sections and items
+        const sectionsData = (template.sections || []).map(sec => ({
+            title: sec.title,
+            items: sec.items.map(i => i.text)
+        }));
+
+        // Handle legacy items if any
+        if ((!template.sections || template.sections.length === 0) && template.items) {
+            sectionsData.push({
+                title: '一般',
+                items: template.items.map(i => i.text)
+            });
+        }
+
+        return this.createTemplate(template.title + ' のコピー', sectionsData);
+    }
+
     getGroups(statusFilter = 'all') {
         if (statusFilter === 'all') return this.data.groups;
         return this.data.groups.filter(g => g.status === statusFilter);
@@ -411,6 +432,8 @@ class UIManager {
         container.appendChild(sectionEl);
     }
 
+
+
     renderTemplates() {
         const templates = this.store.getTemplates();
         const container = this.elements.templatesContainer;
@@ -440,6 +463,9 @@ class UIManager {
                 <div class="card-header">
                     <div class="card-title">${this.escapeHtml(tpl.title)}</div>
                     <div class="card-actions">
+                        <button class="icon-btn" onclick="app.duplicateTemplate('${tpl.id}')" title="複製">
+                           <i class="fas fa-copy"></i>
+                        </button>
                         <button class="icon-btn" onclick="app.editTemplate('${tpl.id}')" title="編集">
                            <i class="fas fa-pen"></i>
                         </button>
@@ -455,6 +481,18 @@ class UIManager {
             `;
             container.appendChild(card);
         });
+    }
+
+    duplicateTemplate(id) {
+        if (confirm('このテンプレートを複製しますか？')) {
+            const newTemplate = this.store.duplicateTemplate(id);
+            if (newTemplate) {
+                // Open modal to edit the new template immediately
+                this.editTemplate(newTemplate.id);
+                // Also switch tab just in case, though modal covers it
+                this.renderTemplates();
+            }
+        }
     }
 
     closeModal() {
