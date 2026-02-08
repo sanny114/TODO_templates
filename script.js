@@ -351,9 +351,19 @@ class UIManager {
     }
 
     render() {
-        this.renderActiveGroups();
-        this.renderTemplates();
-        this.renderArchives();
+        const activeTab = document.querySelector('.nav-btn.active');
+        const currentTab = activeTab ? activeTab.dataset.tab : 'active';
+        switch (currentTab) {
+            case 'active':
+                this.renderActiveGroups();
+                break;
+            case 'templates':
+                this.renderTemplates();
+                break;
+            case 'archive':
+                this.renderArchives();
+                break;
+        }
     }
 
     renderActiveGroups() {
@@ -379,19 +389,20 @@ class UIManager {
                         <div class="card-meta">${dateStr}</div>
                     </div>
                     <div class="card-actions">
-                        <button class="icon-btn danger" onclick="app.deleteGroup('${group.id}')">
+                        <button class="icon-btn danger btn-delete-group">
                             <i class="fas fa-trash"></i>
                         </button>
                     </div>
                 </div>
-                <div class="group-sections" id="group-content-${group.id}">
+                <div class="group-sections">
                     <!-- Sections injected here -->
                 </div>
             `;
             card.innerHTML = contentHtml;
+            card.querySelector('.btn-delete-group').addEventListener('click', () => this.deleteGroup(group.id));
             container.appendChild(card);
 
-            const contentEl = card.querySelector(`#group-content-${group.id}`);
+            const contentEl = card.querySelector('.group-sections');
 
             // Render Sections
             const sections = group.sections || [];
@@ -421,11 +432,12 @@ class UIManager {
             const li = document.createElement('li');
             li.className = `mini-todo-item ${item.completed ? 'completed' : ''}`;
             li.innerHTML = `
-                <div class="mini-check" onclick="app.toggleItem('${groupId}', '${item.id}')">
+                <div class="mini-check">
                     <i class="fas fa-check"></i>
                 </div>
                 <span class="mini-text">${this.escapeHtml(item.text)}</span>
             `;
+            li.querySelector('.mini-check').addEventListener('click', () => this.toggleItem(groupId, item.id));
             listEl.appendChild(li);
         });
 
@@ -463,22 +475,26 @@ class UIManager {
                 <div class="card-header">
                     <div class="card-title">${this.escapeHtml(tpl.title)}</div>
                     <div class="card-actions">
-                        <button class="icon-btn" onclick="app.duplicateTemplate('${tpl.id}')" title="複製">
+                        <button class="icon-btn btn-duplicate-tpl" title="複製">
                            <i class="fas fa-copy"></i>
                         </button>
-                        <button class="icon-btn" onclick="app.editTemplate('${tpl.id}')" title="編集">
+                        <button class="icon-btn btn-edit-tpl" title="編集">
                            <i class="fas fa-pen"></i>
                         </button>
-                        <button class="icon-btn danger" onclick="app.deleteTemplate('${tpl.id}')" title="削除">
+                        <button class="icon-btn danger btn-delete-tpl" title="削除">
                            <i class="fas fa-trash"></i>
                         </button>
                     </div>
                 </div>
                 <div class="template-items-preview">${previewHtml}</div>
-                <button class="btn-start-group" onclick="app.startFromTemplate('${tpl.id}')">
+                <button class="btn-start-group">
                     <i class="fas fa-play"></i> このテンプレートで開始
                 </button>
             `;
+            card.querySelector('.btn-duplicate-tpl').addEventListener('click', () => this.duplicateTemplate(tpl.id));
+            card.querySelector('.btn-edit-tpl').addEventListener('click', () => this.editTemplate(tpl.id));
+            card.querySelector('.btn-delete-tpl').addEventListener('click', () => this.deleteTemplate(tpl.id));
+            card.querySelector('.btn-start-group').addEventListener('click', () => this.startFromTemplate(tpl.id));
             container.appendChild(card);
         });
     }
@@ -584,13 +600,13 @@ class UIManager {
         const div = document.createElement('div');
         div.className = 'tpl-item-row';
         div.innerHTML = `
-            <div class="item-controls" style="margin-right: 5px;">
-                 <i class="fas fa-chevron-up move-item-up" style="cursor:pointer; color:#b2bec3; font-size:0.7rem; margin-right:2px;"></i>
-                 <i class="fas fa-chevron-down move-item-down" style="cursor:pointer; color:#b2bec3; font-size:0.7rem;"></i>
+            <div class="item-controls">
+                 <i class="fas fa-chevron-up move-item-up"></i>
+                 <i class="fas fa-chevron-down move-item-down"></i>
             </div>
-            <i class="fas fa-dot-circle" style="font-size: 0.6rem; color: #b2bec3;"></i>
+            <i class="fas fa-dot-circle tpl-item-bullet"></i>
             <span contenteditable="true" class="editable-span">${this.escapeHtml(text)}</span>
-            <i class="fas fa-times remove-item-btn" style="margin-left:auto; cursor:pointer; color:#b2bec3;"></i>
+            <i class="fas fa-times remove-item-btn"></i>
         `;
         div.querySelector('.remove-item-btn').addEventListener('click', () => {
             // If this is the last item and empty, maybe warn? No, just remove.
@@ -657,9 +673,6 @@ class UIManager {
     }
 
     editTemplate(id) {
-        // Debug
-        // alert('editTemplate Called: ' + id);
-
         const template = this.store.getTemplates().find(t => t.id === id);
         if (template) {
             this.openModal(template);
@@ -684,15 +697,17 @@ class UIManager {
                         <div class="card-meta">完了日: ${new Date(group.updatedAt).toLocaleDateString()}</div>
                     </div>
                     <div class="card-actions">
-                         <button class="icon-btn" onclick="app.unarchiveGroup('${group.id}')" title="戻す">
+                         <button class="icon-btn btn-unarchive" title="戻す">
                             <i class="fas fa-undo"></i>
                         </button>
-                        <button class="icon-btn danger" onclick="app.deleteGroup('${group.id}')">
+                        <button class="icon-btn danger btn-delete-group">
                             <i class="fas fa-trash"></i>
                         </button>
                     </div>
                 </div>
             `;
+            card.querySelector('.btn-unarchive').addEventListener('click', () => this.unarchiveGroup(group.id));
+            card.querySelector('.btn-delete-group').addEventListener('click', () => this.deleteGroup(group.id));
             container.appendChild(card);
         });
     }
@@ -728,14 +743,32 @@ class UIManager {
         this.renderActiveGroups();
         if (this.store.checkAllCompleted(groupId)) {
             this.triggerAutoArchive(groupId);
+        } else if (this._autoArchiveTimer && this._autoArchiveGroupId === groupId) {
+            // User unchecked an item while auto-archive was pending — cancel it
+            clearTimeout(this._autoArchiveTimer);
+            this._autoArchiveTimer = null;
+            this._autoArchiveGroupId = null;
+            this.elements.feedbackOverlay.classList.add('hidden');
         }
     }
 
     triggerAutoArchive(groupId) {
+        // Cancel any pending auto-archive to prevent race conditions
+        if (this._autoArchiveTimer) {
+            clearTimeout(this._autoArchiveTimer);
+            this._autoArchiveTimer = null;
+        }
+        this._autoArchiveGroupId = groupId;
+
         const overlay = this.elements.feedbackOverlay;
         overlay.classList.remove('hidden');
-        setTimeout(() => {
-            this.store.archiveGroup(groupId);
+        this._autoArchiveTimer = setTimeout(() => {
+            this._autoArchiveTimer = null;
+            // Re-check completion state in case user unchecked items during the delay
+            if (this.store.checkAllCompleted(this._autoArchiveGroupId)) {
+                this.store.archiveGroup(this._autoArchiveGroupId);
+            }
+            this._autoArchiveGroupId = null;
             overlay.classList.add('hidden');
             this.render();
         }, 2000);

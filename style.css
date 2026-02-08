@@ -354,10 +354,36 @@ body {
     flex-direction: column;
     justify-content: center;
     height: 16px;
+    margin-right: 5px;
 }
 
-.item-controls i:hover {
-    color: var(--accent-color) !important;
+.item-controls i {
+    cursor: pointer;
+    color: #b2bec3;
+    font-size: 0.7rem;
+}
+
+.item-controls i.move-item-up {
+    margin-right: 2px;
+}
+
+.tpl-item-row .item-controls i:hover {
+    color: var(--accent-color);
+}
+
+.tpl-item-bullet {
+    font-size: 0.6rem;
+    color: #b2bec3;
+}
+
+.remove-item-btn {
+    margin-left: auto;
+    cursor: pointer;
+    color: #b2bec3;
+}
+
+.remove-item-btn:hover {
+    color: #ff7675;
 }
 
 .editable-span {
@@ -626,17 +652,15 @@ body {
     justify-content: center;
     align-items: center;
     opacity: 0;
+    visibility: hidden;
     pointer-events: none;
-    transition: opacity 0.3s;
+    transition: opacity 0.3s, visibility 0.3s;
 }
 
 .modal-overlay:not(.hidden) {
     opacity: 1;
+    visibility: visible;
     pointer-events: auto;
-}
-
-.modal-overlay.hidden {
-    display: none;
 }
 
 .modal-card {
